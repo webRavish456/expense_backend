@@ -33,14 +33,14 @@ const ExpenseSchema = new mongoose.Schema({
 });
 const Expense = mongoose.model("Expense", ExpenseSchema);
 
-// User Schema
+
 const UserSchema = new mongoose.Schema({
     email: { type: String, required: true },
     expenseLimit: { type: Number, default: 0 }
 });
 const User = mongoose.model("User", UserSchema);
 
-// Email transporter
+
 const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
@@ -49,7 +49,7 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-// 🕒 CRON JOB (Runs every day at 8 PM IST)
+
 cron.schedule("0 20 * * *", async () => {
     
     const users = await User.find();
@@ -75,20 +75,18 @@ cron.schedule("0 20 * * *", async () => {
     }
 });
 
-// 📌 ROUTES
+
 
 app.post("/expenses", async (req, res) => {
     try {
         const { amount, description, category, date, paymentMethod, userEmail } = req.body;
-        if (!amount || !description || !category || !date || !paymentMethod || !userEmail) {
+        if (!amount || !description || !category || !date || !paymentMethod) {
             return res.status(400).json({ message: "All fields are required" });
         }
 
-        console.log("req.body", req.body);
-        const expense = new Expense({ amount, description, category, date, paymentMethod, userEmail });
+        const expense = new Expense({ amount, description, category, date, paymentMethod });
         await expense.save();
 
-        // 📌 Trigger email notification after saving the expense
         await sendExpenseReport();
 
         res.status(201).json(expense);
@@ -97,7 +95,7 @@ app.post("/expenses", async (req, res) => {
     }
 });
 
-// Function to send expense report to all users
+
 const sendExpenseReport = async () => {
     try {
         const users = await User.find();
@@ -137,7 +135,7 @@ app.get("/expenses", async (req, res) => {
     }
 });
 
-// ➤ Update an expense
+
 app.put("/expenses/:id", async (req, res) => {
     try {
         const { amount, description, category, date, paymentMethod } = req.body;
@@ -174,7 +172,7 @@ app.delete("/expenses/:id", async (req, res) => {
     }
 });
 
-// ➤ Set user expense limit
+
 app.post("/set-expense-limit", async (req, res) => {
     try {
         const { email, expenseLimit } = req.body;
