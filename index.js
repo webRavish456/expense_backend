@@ -13,7 +13,11 @@ const PORT = process.env.PORT || 8000;
 const app = express();
 
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: "http://localhost:3000",
+    methods: "GET,POST,PUT,DELETE",
+    credentials: true
+}));
 app.use(compression());
 app.use(bodyParser.json({ extended: true }));
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -33,14 +37,14 @@ const ExpenseSchema = new mongoose.Schema({
 });
 const Expense = mongoose.model("Expense", ExpenseSchema);
 
-
+// User Schema
 const UserSchema = new mongoose.Schema({
     email: { type: String, required: true },
     expenseLimit: { type: Number, default: 0 }
 });
 const User = mongoose.model("User", UserSchema);
 
-
+// Email transporter
 const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
@@ -49,33 +53,33 @@ const transporter = nodemailer.createTransport({
     },
 });
 
+// // 🕒 CRON JOB (Runs every day at 8 PM IST)
+// cron.schedule("1 * * * * *", async () => {
+//     console.log("Checking expenses...");
+//     const users = await User.find();
+//     for (let user of users) {
+//         const totalExpense = await Expense.aggregate([
+//             { $match: { userEmail: user.email } },
+//             { $group: { _id: null, total: { $sum: "$amount" } } }
+//         ]);
 
-cron.schedule("0 20 * * *", async () => {
-    
-    const users = await User.find();
-    for (let user of users) {
-        const totalExpense = await Expense.aggregate([
-            { $match: { userEmail: user.email } },
-            { $group: { _id: null, total: { $sum: "$amount" } } }
-        ]);
+//         const total = totalExpense[0]?.total || 0;
+//         let message = total > user.expenseLimit
+//             ? `⚠️ Warning: You exceeded ₹${user.expenseLimit}. Your current total is ₹${total}.`
+//             : `✅ Good Job: You're within your ₹${user.expenseLimit} limit. Total: ₹${total}.`;
 
-        const total = totalExpense[0]?.total || 0;
-        let message = total > user.expenseLimit
-            ? `⚠️ Warning: You exceeded ₹${user.expenseLimit}. Your current total is ₹${total}.`
-            : `✅ Good Job: You're within your ₹${user.expenseLimit} limit. Total: ₹${total}.`;
+//         await transporter.sendMail({
+//             from: process.env.EMAIL_USER,
+//             to: user.email,
+//             subject: "Daily Expense Report",
+//             text: message,
+//         });
 
-        await transporter.sendMail({
-            from: process.env.EMAIL_USER,
-            to: user.email,
-            subject: "Daily Expense Report",
-            text: message,
-        });
+//         console.log(`Email sent to ${user.email}`);
+//     }
+// });
 
-        console.log(`Email sent to ${user.email}`);
-    }
-});
-
-
+// 📌 ROUTES
 
 app.post("/expenses", async (req, res) => {
     try {
@@ -100,12 +104,12 @@ const sendExpenseReport = async () => {
     try {
         const users = await User.find();
         for (let user of users) {
-            const totalExpense = await Expense.aggregate([
-                { $match: { userEmail: user.email } },
-                { $group: { _id: null, total: { $sum: "$amount" } } }
-            ]);
+            const total = await Expense.find().then(expenses => 
+                expenses.reduce((sum, expense) => sum + expense.amount, 0)
+            );
 
-            const total = totalExpense[0]?.total || 0;
+            console.log(`Total Expense: ₹${total}`);
+
             let message = total > user.expenseLimit
                 ? `⚠️ Warning: You exceeded ₹${user.expenseLimit}. Your current total is ₹${total}.`
                 : `✅ Good Job: You're within your ₹${user.expenseLimit} limit. Total: ₹${total}.`;
@@ -135,7 +139,7 @@ app.get("/expenses", async (req, res) => {
     }
 });
 
-
+// ➤ Update an expense
 app.put("/expenses/:id", async (req, res) => {
     try {
         const { amount, description, category, date, paymentMethod } = req.body;
@@ -172,7 +176,7 @@ app.delete("/expenses/:id", async (req, res) => {
     }
 });
 
-
+// ➤ Set user expense limit
 app.post("/set-expense-limit", async (req, res) => {
     try {
         const { email, expenseLimit } = req.body;
