@@ -51,7 +51,7 @@ const transporter = nodemailer.createTransport({
 
 // 🕒 CRON JOB (Runs every day at 8 PM IST)
 cron.schedule("0 20 * * *", async () => {
-    console.log("Checking expenses...");
+    
     const users = await User.find();
     for (let user of users) {
         const totalExpense = await Expense.aggregate([
@@ -77,22 +77,55 @@ cron.schedule("0 20 * * *", async () => {
 
 // 📌 ROUTES
 
-// ➤ Add a new expense
 app.post("/expenses", async (req, res) => {
     try {
         const { amount, description, category, date, paymentMethod, userEmail } = req.body;
-        if (!amount || !description || !category || !date || !paymentMethod) {
+        if (!amount || !description || !category || !date || !paymentMethod || !userEmail) {
             return res.status(400).json({ message: "All fields are required" });
         }
 
-        console.log("req.body", req.body)
+        console.log("req.body", req.body);
         const expense = new Expense({ amount, description, category, date, paymentMethod, userEmail });
         await expense.save();
+
+        // 📌 Trigger email notification after saving the expense
+        await sendExpenseReport();
+
         res.status(201).json(expense);
     } catch (error) {
         res.status(500).json({ message: "Error adding expense", error });
     }
 });
+
+// Function to send expense report to all users
+const sendExpenseReport = async () => {
+    try {
+        const users = await User.find();
+        for (let user of users) {
+            const totalExpense = await Expense.aggregate([
+                { $match: { userEmail: user.email } },
+                { $group: { _id: null, total: { $sum: "$amount" } } }
+            ]);
+
+            const total = totalExpense[0]?.total || 0;
+            let message = total > user.expenseLimit
+                ? `⚠️ Warning: You exceeded ₹${user.expenseLimit}. Your current total is ₹${total}.`
+                : `✅ Good Job: You're within your ₹${user.expenseLimit} limit. Total: ₹${total}.`;
+
+            await transporter.sendMail({
+                from: process.env.EMAIL_USER,
+                to: user.email,
+                subject: "Expense Update",
+                text: message,
+            });
+
+            console.log(`Email sent to ${user.email}`);
+        }
+    } catch (error) {
+        console.error("Error sending expense report:", error);
+    }
+};
+
 
 // ➤ Get all expenses
 app.get("/expenses", async (req, res) => {
